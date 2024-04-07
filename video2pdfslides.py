@@ -6,30 +6,29 @@ import shutil
 import img2pdf
 import glob
 import argparse
+from dotenv import load_dotenv
 
-############# Define constants
+load_dotenv()
 
-OUTPUT_SLIDES_DIR = f"./output"
+# Define constants
+OUTPUT_SLIDES_DIR = os.environ.get('OUTPUT_SLIDES_DIR', f'./output')
 
-FRAME_RATE = 3                   # no.of frames per second that needs to be processed, fewer the count faster the speed
-WARMUP = FRAME_RATE              # initial number of frames to be skipped
-FGBG_HISTORY = FRAME_RATE * 15   # no.of frames in background object
-VAR_THRESHOLD = 16               # Threshold on the squared Mahalanobis distance between the pixel and the model to decide whether a pixel is well described by the background model.
-DETECT_SHADOWS = False            # If true, the algorithm will detect shadows and mark them.
-MIN_PERCENT = 0.1                # min % of diff between foreground and background to detect if motion has stopped
-MAX_PERCENT = 3                  # max % of diff between foreground and background to detect if frame is still in motion
-
+FRAME_RATE = os.environ.get('FRAME_RATE', '3')
+WARMUP = os.environ.get('WARMUP', FRAME_RATE)
+FGBG_HISTORY = os.environ.get('FGBG_HISTORY', FRAME_RATE * 15)   
+VAR_THRESHOLD = os.environ.get('VAR_THRESHOLD', '16')
+DETECT_SHADOWS = os.environ.get('DETECT_SHADOWS', 'FALSE')
+MIN_PERCENT = os.environ.get('MIN_PERCENT', '0.1')
+MAX_PERCENT = os.environ.get('MAX_PERCENT', '3')
 
 def get_frames(video_path):
     '''A fucntion to return the frames from a video located at video_path
     this function skips frames as defined in FRAME_RATE'''
     
-    
     # open a pointer to the video file initialize the width and height of the frame
     vs = cv2.VideoCapture(video_path)
     if not vs.isOpened():
         raise Exception(f'unable to open file {video_path}')
-
 
     total_frames = vs.get(cv2.CAP_PROP_FRAME_COUNT)
     frame_time = 0
