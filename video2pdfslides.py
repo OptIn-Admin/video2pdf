@@ -15,7 +15,7 @@ OUTPUT_SLIDES_DIR = os.environ.get('OUTPUT_SLIDES_DIR', f'./output')
 
 FRAME_RATE = os.environ.get('FRAME_RATE', '3')
 WARMUP = os.environ.get('WARMUP', FRAME_RATE)
-FGBG_HISTORY = os.environ.get('FGBG_HISTORY', FRAME_RATE * 15)   
+FGBG_HISTORY = os.environ.get('FGBG_HISTORY', FRAME_RATE * 15)
 VAR_THRESHOLD = os.environ.get('VAR_THRESHOLD', '16')
 DETECT_SHADOWS = os.environ.get('DETECT_SHADOWS', 'FALSE')
 MIN_PERCENT = os.environ.get('MIN_PERCENT', '0.1')
