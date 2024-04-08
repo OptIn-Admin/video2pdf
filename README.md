@@ -20,7 +20,7 @@ It will capture screenshots of unique frames and save it output folder...once sc
 There are two sample video avilable in "./input", you can test the code using these input by running
 
 ```python video2pdfslides.py "./input/Test Video 1.mp4" (4 unique slide)
-python video2pdfslides.py "./input/Test Video 2.mp4" (19 unique slide)```
+python video2pdfslides.py "./input/Test Video 2.mp4" (19 unique slide)"```
 
 ## More
 

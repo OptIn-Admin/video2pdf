@@ -4,8 +4,8 @@ import cv2
 import imutils
 import shutil
 import img2pdf
-import glob
 import argparse
+from pathlib import Path
 from dotenv import load_dotenv
 from decimal import Decimal
 
@@ -13,22 +13,35 @@ load_dotenv()
 
 # DEFINE CONSTANTS; default environment values = source code values
 # Outputs
-OUTPUT_SLIDES_DIR = os.environ.get('OUTPUT_SLIDES_DIR', './output')
-SLIDE_IMAGE_PREFIX = os.environ.get('SLIDE_IMAGE_PREFIX',
+OUTPUT_SLIDES_DIR = os.environ.get('ENV_OUTPUT_SLIDES_DIR', './output')
+SLIDE_IMAGE_PREFIX = os.environ.get('ENV_SLIDE_IMAGE_PREFIX',
                                     'screenshoots_count:03')
-SLIDE_COUNT_INCREMENT = int(os.environ.get('SLIDE_COUNT_INCREMENT', '1'))
-INCLUDE_TIME_STAMP = os.environ.get('INCLUDE_TIME_STAMP', 'True')
+SLIDE_COUNT_INCREMENT = int(os.environ.get('ENV_SLIDE_COUNT_INCREMENT', '1'))
+INCLUDE_TIME_STAMP = os.environ.get('ENV_INCLUDE_TIME_STAMP', True).lower() in ['true', 't', '1']
 # Capture
-FRAME_RATE = int(os.environ.get('FRAME_RATE', '3'))
-WARMUP = int(os.environ.get('WARMUP', FRAME_RATE))
-FGBG_HISTORY = int(os.environ.get('FGBG_HISTORY', (FRAME_RATE * 15)))
-VAR_THRESHOLD = int(os.environ.get('VAR_THRESHOLD', '16'))
-DETECT_SHADOWS = os.environ.get('DETECT_SHADOWS', 'False')
-MIN_PERCENT = Decimal(os.environ.get('MIN_PERCENT', '0.1'))
-MAX_PERCENT = Decimal(os.environ.get('MAX_PERCENT', '3.0'))
+FRAME_RATE = int(os.environ.get('ENV_FRAME_RATE', '3'))
+WARMUP = int(os.environ.get('ENV_WARMUP', FRAME_RATE))
+FGBG_HISTORY = int(os.environ.get('ENV_FGBG_HISTORY', FRAME_RATE * 15))
+VAR_THRESHOLD = int(os.environ.get('ENV_VAR_THRESHOLD', '16'))
+DETECT_SHADOWS = os.environ.get('ENV_DETECT_SHADOWS', False).lower() in ['true', 't', '1']
+MIN_PERCENT = Decimal(os.environ.get('ENV_MIN_PERCENT', '0.1'))
+MAX_PERCENT = Decimal(os.environ.get('ENV_MAX_PERCENT', '3.0'))
+MANUAL_INSPECTION = os.environ.get('ENV_MANUAL_INSPECTION', False).lower() in ['true', 't', '1']
 
-# Set global default
-output_folder_path = OUTPUT_SLIDES_DIR
+
+def initialize_output_folder(video_path):
+    '''Clean the output folder if already exists'''
+    output_folder_path = Path(OUTPUT_SLIDES_DIR) / video_path.rsplit('/')[-1].split('.')[0]
+    output_folder_path_images = output_folder_path / 'images'
+
+    # BACKLOG: add try/catch
+    if output_folder_path.exists():
+        shutil.rmtree(str(output_folder_path))
+
+    output_folder_path.mkdir(parents=True, exist_ok=True)
+    output_folder_path_images.mkdir(exist_ok=True)
+
+    return output_folder_path, output_folder_path_images
 
 
 def get_frames(video_path):
@@ -46,8 +59,8 @@ def get_frames(video_path):
     total_frames = vs.get(cv2.CAP_PROP_FRAME_COUNT)
     frame_time = 0
     frame_count = 0
-    print("total_frames: ", total_frames)
-    print("FRAME_RATE", FRAME_RATE)
+    total_frames = int(total_frames)
+    print("total_frames: ", f"{total_frames:,}")
 
     # loop over the frames of the video
     while True:
@@ -67,7 +80,7 @@ def get_frames(video_path):
     vs.release()
 
 
-def detect_unique_screenshots(video_path, output_folder_path):
+def detect_unique_screenshots(video_path, output_folder_path_images):
     ''''''
     # Initialize fgbg a Background object with Parameters
     # history = The number of frames history that effects the
@@ -114,59 +127,64 @@ def detect_unique_screenshots(video_path, output_folder_path):
         #   thus capture the frame
         if p_diff < MIN_PERCENT and not captured and frame_count > WARMUP:
             # BACKLOG: add try/catch
-
             captured = True
+            file_count = get_file_count(screenshoots_count)
+            filename = f"{SLIDE_IMAGE_PREFIX}{file_count}{output_time_stamp(frame_time)}.png"
 
-            filename = f"""{SLIDE_IMAGE_PREFIX}_{screenshoots_count}
-                                {output_time_stamp(frame_time)}.png"""
+            image_path = output_folder_path_images / filename
 
-            path = os.path.join(output_folder_path, filename)
-            print("saving {}".format(path))
-            cv2.imwrite(path, orig)
-            screenshoots_count += SLIDE_COUNT_INCREMENT
+            print("Saving image", file_count)
+
+            try:
+                cv2.imwrite(str(image_path), orig)
+                screenshoots_count += SLIDE_COUNT_INCREMENT
+            except Exception as e:
+                print(f"Error occurred while converting screenshots to PDF: {e}")
+                print(f"image_path: {image_path}")
 
         # Otherwise, either the scene is changing or we're still in warmup
         # mode so let's wait until the scene has settled or we're finished
         # building the background model
         elif captured and p_diff >= MAX_PERCENT:
             captured = False
-    print(f"{screenshoots_count/SLIDE_COUNT_INCREMENT} screenshots captured!")
-    print(f"Time taken {time.time()-start_time}s")
+    print(f"{int(screenshoots_count/SLIDE_COUNT_INCREMENT)} screenshots captured!")
+    print(f"Time taken {round(time.time()-start_time, 1)}s")
     return
 
 
-def initialize_output_folder(video_path):
-    '''Clean the output folder if already exists'''
-    output_folder_path = f"{OUTPUT_SLIDES_DIR}/{video_path.rsplit('/')[-1].split('.')[0]}"
-
-    # BACKLOG: add try/catch
-
-    if os.path.exists(output_folder_path):
-        shutil.rmtree(output_folder_path)
-
-    os.makedirs(output_folder_path, exist_ok=True)
-    print('Initialized output folder', output_folder_path)
-    return output_folder_path
+def get_file_count(current_slide_number):
+    # ensure correct sequencing for PDF page order
+    match current_slide_number:
+        case x if 10 <= x <= 99:
+            return f"0{x}.0"
+        case y if y >= 100:
+            return f"{y}.0"
+        case _:
+            return f"00{current_slide_number}.0"
 
 
-def output_time_stamp(frame_time):
+def output_time_stamp(vframe_time):
     match INCLUDE_TIME_STAMP:
         case False:
             return ''
         case _:
-            return f"_{round(frame_time/60, 2)}"
+            return f"_{round(vframe_time/60, 2)}"
 
 
-def convert_screenshots_to_pdf(output_folder_path):
+def convert_screenshots_to_pdf(output_folder_path, output_folder_path_images):
     # BACKLOG: add try/catch
 
-    output_pdf_path = f"{OUTPUT_SLIDES_DIR}/{video_path.rsplit('/')[-1].split('.')[0]}.pdf"
-    print('output_folder_path', output_folder_path)
-    print('output_pdf_path', output_pdf_path)
     print('Converting images to pdf...')
-    with open(output_pdf_path, 'wb') as f:
-        f.write(img2pdf.convert(sorted(glob.glob(f"{output_folder_path}/*.png"))))
-    print('PDF created and saved at ', output_pdf_path)
+    pdf_filename = output_folder_path.name + '.pdf' # Use the folder name as the PDF filename
+    pdf_path = output_folder_path / pdf_filename    # specify the file path
+
+    try:
+        png_files = sorted(output_folder_path_images.glob('*.png'))
+        with pdf_path.open('wb') as f:  # use the pdf_path to create the file
+            f.write(img2pdf.convert([str(p) for p in png_files]))
+        print('PDF created and saved at:', pdf_path)
+    except Exception as e:
+        print(f'Error occurred while converting screenshots to PDF: {e}')
 
 
 if __name__ == '__main__':
@@ -183,21 +201,22 @@ if __name__ == '__main__':
     video_path = args.video_path
 
     print('video_path', video_path)
-    output_folder_path = initialize_output_folder(video_path)
-    detect_unique_screenshots(video_path, output_folder_path)
+    output_folder_path, output_folder_path_images = initialize_output_folder(video_path)
+    detect_unique_screenshots(video_path, output_folder_path_images)
 
-    print('Please manually verify screenshots and delete duplicates')
-    while True:
-        # BACKLOG: add try/catch
+    if MANUAL_INSPECTION:
+        print('Please manually verify screenshots and delete duplicates')
+        while True:
+            # BACKLOG: add try/catch
 
-        choice = input('Press Y to continue and N to terminate: ')
-        choice = choice.upper().strip()
-        if choice in ['Y', 'N']:
-            break
-        else:
-            print('Please enter a valid choice')
+            choice = input('Press Y to continue and N to terminate: ')
+            choice = choice.upper().strip()
+            if choice in ['Y', 'N']:
+                break
+            else:
+                print('Please enter a valid choice')
 
-    if choice == 'Y':
-        # BACKLOG: add try/catch
-
-        convert_screenshots_to_pdf(output_folder_path)
+        if choice == 'N':
+            exit
+    # Put a bow on that PDF!
+    convert_screenshots_to_pdf(output_folder_path, output_folder_path_images)
